@@ -161,10 +161,11 @@ __global__ void d_serial_merge(_kv *a, _kv *b, _kv *res, int size) {
 }
 __global__ void d_binS_merge(_kv *A, _kv *B, _kv *C, int n) {
 	int pos = blockIdx.x * blockDim.x + threadIdx.x;
-	int is_mid;
+	int is_mid = 0;
 	int ret;
 	//find final location for A[pos] and B[pos]
 	if(pos < n) {
+		//ret = 0;
 		ret = binSearch(A[pos].key, B, n, &is_mid);
 		c_strcpy(C[pos + ret + is_mid].key, A[pos].key);
 		//cudaMemcpy(C[pos + ret + is_mid].value, A[pos].value, VSIZE, cudaMemcpyDeviceToDevice);
@@ -239,7 +240,7 @@ int main(int argc, char *argv[])
 	int bytes;
 	_kv *d_inp1[N_STREAMS], *d_inp2[N_STREAMS], *d_out[N_STREAMS];
 	cudaStream_t streams[N_STREAMS];
-	double ts_a, ts_b, ts_c;
+	double ts_a, ts_b, ts_c, ts_d;
 
 	if(argc != 3) {
 		printf("Required: partition size, number of partitions\n");
@@ -282,6 +283,8 @@ int main(int argc, char *argv[])
 	if(check_sorted(&data) == 0) {
 		printf("Result GPU incorrect\n");
 	}
+
+	ts_c = getTime();
 	for(i = 0; i < N_THREADS; i++) {
 		part[i].data = &data;
 		part[i].t_no = i;
@@ -290,11 +293,11 @@ int main(int argc, char *argv[])
 	for(i = 0; i < N_THREADS; i++) {
 		pthread_join(tids[i], NULL);
 	}
-	ts_c = getTime();
+	ts_d = getTime();
 	if(check_sorted(&data) == 0) {
 		printf("Result CPU incorrect\n");
 	}
-	printf("Execution time Streaming %d GPU %.6f %d threads CPU %.6f\n",N_STREAMS, ts_b - ts_a, N_THREADS, ts_c - ts_b);
+	printf("Execution time Streaming %d GPU %.6f %d threads CPU %.6f\n",N_STREAMS, ts_b - ts_a, N_THREADS, ts_d - ts_c);
 
 	cudaDeviceReset();
 
