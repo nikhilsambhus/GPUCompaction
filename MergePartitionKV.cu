@@ -8,10 +8,9 @@
 #define N_STREAMS 4
 #define N_THREADS 8
 #define KSIZE 16
-#define VSIZE 32-16
-//#define MP_PSIZE 4
-#define MP_NOPARTS_PR 11
-#define MP_NOPARTS (1 << MP_NOPARTS_PR)
+//#define VSIZE (512-16)
+#define VSIZE (32-16)
+
 typedef struct {
 	char key[KSIZE];
 	char value[VSIZE];
@@ -44,6 +43,8 @@ __device__ void c_strcpy(char *dest, char *src) {
 }
 
 __device__ void c_memcpy(void *dest, void *src, int size) {
+	//memcpy(dest, src, size);
+	//return;
 	int i;
 	uint64_t *dp = (uint64_t *)dest, *sp = (uint64_t *)src;
 	for(i = 0; i < size; i+=8) {
@@ -52,8 +53,8 @@ __device__ void c_memcpy(void *dest, void *src, int size) {
 }	
 __device__ int c_atoi(char *str) {
 	int i = 0, ret = 0;
-	uint32_t tmp;
-	/*__shared__ char c_str[KSIZE];
+	/*uint32_t tmp;
+	__shared__ char c_str[KSIZE];
 	#pragma roop unroll
 	for(i = 0; i < KSIZE; i+=4) {
 		tmp = str[i];
@@ -88,24 +89,28 @@ void cpuMerge(_kv *a, _kv *b, _kv *res, int size) {
 	while (z < size * 2) {
 		if((i < size) && (j < size)) {
 			if(atoi(a[i].key) <= atoi(b[j].key)) {
-				strcpy(res[z].key, a[i].key);
-				strncpy(res[z].value, a[i].value, VSIZE);
+				//strcpy(res[z].key, a[i].key);
+				//strncpy(res[z].value, a[i].value, VSIZE);
+				memcpy(&res[z], &a[i], KSIZE+VSIZE);
 				i++;
 			}
 			else {
-				strcpy(res[z].key, b[j].key);
-				strncpy(res[z].value, b[j].value, VSIZE);
+				//strcpy(res[z].key, b[j].key);
+				//strncpy(res[z].value, b[j].value, VSIZE);
+				memcpy(&res[z], &b[j], KSIZE+VSIZE);
 				j++;
 			}
 		}
 		else if(i < size) {
-			strcpy(res[z].key, a[i].key);
-			strncpy(res[z].value, a[i].value, VSIZE);
+			//strcpy(res[z].key, a[i].key);
+			//strncpy(res[z].value, a[i].value, VSIZE);
+			memcpy(&res[z], &a[i], KSIZE+VSIZE);
 			i++;
 		}
 		else if (j < size) {
-			strcpy(res[z].key, b[j].key);
-			strncpy(res[z].value, b[j].value, VSIZE);
+			//strcpy(res[z].key, b[j].key);
+			//strncpy(res[z].value, b[j].value, VSIZE);
+			memcpy(&res[z], &b[j], KSIZE+VSIZE);
 			j++;
 		}
 		z++;
@@ -175,7 +180,7 @@ __global__ void d_binS_merge(_kv *A, _kv *B, _kv *C, int n) {
 
 
 __device__ struct partStart diagInter(_kv *A, _kv *B, int n, int pindex, int parts) {
-	int diag = ((n >> MP_NOPARTS_PR) << 1) * pindex;
+	int diag = ((n/parts) << 1) * pindex;
 	int begin = ((diag - n ) > 0 ? diag - n: 0);
 	int end = (diag > n ? n : diag);
 	int aKey, bKey;
@@ -265,7 +270,8 @@ __device__ void merge(_kv *A, int ai, _kv *B, int bi, _kv *C, int ci, int n, int
 	}
 }
 __global__ void d_pathMerge(_kv *A, _kv *B, _kv *C, int n, int parts) {
-	int lenPart = ((n << 1) >> MP_NOPARTS_PR);// parts;
+	//return;
+	int lenPart = ((n << 1)/parts);
 	//lenPart = 0;
 	struct partStart ABstart;
 	int Cstart;
@@ -273,7 +279,7 @@ __global__ void d_pathMerge(_kv *A, _kv *B, _kv *C, int n, int parts) {
 	
 	if(pindex < parts) {
 		ABstart = diagInter(A, B, n, pindex, parts);
-		Cstart = pindex * ((n << 1) >> MP_NOPARTS_PR);
+		Cstart = (n << 1)/parts * pindex;
 		merge(A, ABstart.ai, B, ABstart.bi, C, Cstart, n, lenPart);
 	}
 }
@@ -369,7 +375,6 @@ int main(int argc, char *argv[])
 	}
 
 	assert(data.noparts % N_STREAMS == 0);
-	assert((data.psize) % MP_NOPARTS == 0);
 	ts_a = getTime();
 	//launch transfer and kernels in streams
 	for(i = 0; i < data.noparts; i += N_STREAMS) {
@@ -378,7 +383,7 @@ int main(int argc, char *argv[])
 			cudaMemcpyAsync(d_inp2[j], data.inp2[i+j], bytes, cudaMemcpyHostToDevice, streams[j]);
 			//launch kernel
 			//d_binS_merge <<<grid, block, 0, streams[j]>>> (d_inp1[j], d_inp2[j], d_out[j], data.psize);
-			pathMerge(d_inp1[j], d_inp2[j], d_out[j], data.psize, MP_NOPARTS, streams[j]); 
+			pathMerge(d_inp1[j], d_inp2[j], d_out[j], data.psize, (data.psize << 1), streams[j]); 
 			cudaMemcpyAsync(data.out[i+j], d_out[j], 2 * bytes, cudaMemcpyDeviceToHost, streams[j]);
 		}
 
