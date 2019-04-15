@@ -286,7 +286,7 @@ __global__ void d_pathMerge(_kv *A, _kv *B, _kv *C, int n, int parts) {
 void pathMerge(_kv *A, _kv *B, _kv *C, int n, int parts, cudaStream_t stream) {
 	dim3 block(32);
 	dim3 grid((parts + block.x - 1)/block.x);
-	d_pathMerge<<<grid, block, 0, stream>>> (A, B, C, n, parts);
+	//d_pathMerge<<<grid, block, 0, stream>>> (A, B, C, n, parts);
 }
 int check_sorted(_compdata *data) {
 	int i, j;
@@ -302,9 +302,28 @@ int check_sorted(_compdata *data) {
 	}
 	return 1;
 }
+
+int cmpF(const void *a, const void *b) {
+	int v1 = *(int *)a;
+	int v2 = *(int *)b;
+	if(v1 < v2) return -1;
+	else if(v1 > v2) return 1;
+	else return 0;
+}	
+
 void initCompData(_compdata *data) {
 	int i, j;
 	int bytes = data->psize * sizeof(_kv);
+	int *randSet1, *randSet2;
+	randSet1 = (int *)malloc(data->psize * sizeof(int));
+	randSet2 = (int *)malloc(data->psize * sizeof(int));
+	srand(100);
+	for (i = 0; i < data->psize; i++) {
+		randSet1[i] = rand();
+		randSet2[i] = rand();
+	}
+	qsort(randSet1, data->psize, sizeof(int), cmpF);
+	qsort(randSet2, data->psize, sizeof(int), cmpF);
 	cudaError_t status;
 	data->inp1 = (_kv **) malloc(sizeof(_kv *) * data->noparts);
 	data->inp2 = (_kv **) malloc(sizeof(_kv *) * data->noparts);
@@ -317,13 +336,17 @@ void initCompData(_compdata *data) {
 		status = cudaHostAlloc((void **)&data->out[i], 2 * bytes, cudaHostAllocDefault);
 		checkStatus(status, "cudaHostAlloc");
 		for(j = 0; j < data->psize; j++) {
-			sprintf(data->inp1[i][j].key, "%015d", data->psize*i + j);
+			sprintf(data->inp1[i][j].key, "%015d", randSet1[j]);
 			memset(data->inp1[i][j].value, 'x', VSIZE);
-			sprintf(data->inp2[i][j].key, "%015d", data->psize*i + j + 2);
+			sprintf(data->inp2[i][j].key, "%015d", randSet2[j]);
 			memset(data->inp2[i][j].value, 'x', VSIZE);
 			//printf("%s %s\n", data->inp1[i][j].key, data->inp2[i][j].key);
 		}
 	}
+
+	free(randSet1);
+	free(randSet2);
+	printf("Initilization done\n");
 	return;
 }
 
