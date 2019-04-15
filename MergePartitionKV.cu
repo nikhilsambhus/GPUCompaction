@@ -10,6 +10,7 @@
 #define KSIZE 16
 //#define VSIZE (512-16)
 #define VSIZE (32-16)
+//#define VSIZE (128-16)
 
 typedef struct {
 	char key[KSIZE];
@@ -53,17 +54,6 @@ __device__ void c_memcpy(void *dest, void *src, int size) {
 }	
 __device__ int c_atoi(char *str) {
 	int i = 0, ret = 0;
-	/*uint32_t tmp;
-	__shared__ char c_str[KSIZE];
-	#pragma roop unroll
-	for(i = 0; i < KSIZE; i+=4) {
-		tmp = str[i];
-		c_str[i] = tmp >> 24;
-		c_str[i+1] = tmp >> 16;
-		c_str[i+2] = tmp >> 8;
-		c_str[i+3] = tmp >> 0;
-	}
-	i = 0;*/
 	while(str[i] != '\0') {
 		ret = ret * 10 + str[i] - '0';
 		i++;
@@ -89,27 +79,19 @@ void cpuMerge(_kv *a, _kv *b, _kv *res, int size) {
 	while (z < size * 2) {
 		if((i < size) && (j < size)) {
 			if(atoi(a[i].key) <= atoi(b[j].key)) {
-				//strcpy(res[z].key, a[i].key);
-				//strncpy(res[z].value, a[i].value, VSIZE);
 				memcpy(&res[z], &a[i], KSIZE+VSIZE);
 				i++;
 			}
 			else {
-				//strcpy(res[z].key, b[j].key);
-				//strncpy(res[z].value, b[j].value, VSIZE);
 				memcpy(&res[z], &b[j], KSIZE+VSIZE);
 				j++;
 			}
 		}
 		else if(i < size) {
-			//strcpy(res[z].key, a[i].key);
-			//strncpy(res[z].value, a[i].value, VSIZE);
 			memcpy(&res[z], &a[i], KSIZE+VSIZE);
 			i++;
 		}
 		else if (j < size) {
-			//strcpy(res[z].key, b[j].key);
-			//strncpy(res[z].value, b[j].value, VSIZE);
 			memcpy(&res[z], &b[j], KSIZE+VSIZE);
 			j++;
 		}
@@ -150,7 +132,6 @@ __device__ int binSearch(char *elem, _kv *Sa, int n, int *is_mid) {
 		}
 		else {
 			*is_mid = 1;
-			//printf("match %d\n", elem);
 			break;
 		}
 	}
@@ -167,12 +148,10 @@ __global__ void d_binS_merge(_kv *A, _kv *B, _kv *C, int n) {
 		ret = 0;
 		ret = binSearch(A[pos].key, B, n, &is_mid);
 		c_strcpy(C[pos + ret + is_mid].key, A[pos].key);
-		//cudaMemcpy(C[pos + ret + is_mid].value, A[pos].value, VSIZE, cudaMemcpyDeviceToDevice);
 		memcpy(C[pos + ret + is_mid].value, A[pos].value, VSIZE);
 
 		ret = binSearch(B[pos].key, A, n, &is_mid);
 		c_strcpy(C[pos + ret].key, B[pos].key);
-		//cudaMemcpy(C[pos + ret].value, A[pos].value, VSIZE, cudaMemcpyDeviceToDevice);
 		memcpy(C[pos + ret].value, A[pos].value, VSIZE);
 	}
 
@@ -203,66 +182,25 @@ __device__ struct partStart diagInter(_kv *A, _kv *B, int n, int pindex, int par
 	return ABstart;
 
 }
-/*__device__ struct partStart diagInter(_kv *A, _kv *B, int n, int pindex, int parts) {
-	int diag = (pindex+1) * (2 * n)/parts - 1;
-	int atop = (diag > (n - 1) ? n - 1 : diag);
-	int btop = (diag > (n - 1) ? diag - n : 0);
-	int abot = btop;
-	int offset;
-	struct partStart ABstart;
-	int ai = 0, bi = 0;
-	//printf("diag %d atop %d btop %d abot %d\n", diag, atop, btop, abot);
-	
-		
-	while(abot < atop) {
-		offset = (atop - abot) / 2;
-		ai = atop - offset;
-		bi = btop + offset;
-		if(c_atoi(A[ai].key) > c_atoi(B[bi-1].key)) {
-			if(c_atoi(A[ai-1].key) <= c_atoi(B[bi].key)) {
-				break;
-			}
-			else {
-				atop = ai - 1;
-				btop = bi + 1;
-			}
-		}
-		else {
-			abot = ai + 1;	
-		}
-	}	
-	printf("pindex %d ai %d bi %d\n", pindex, ai, bi);
-	ABstart.ai = ai;
-	ABstart.bi = bi;
-	return ABstart;
-}*/
 
 __device__ void merge(_kv *A, int ai, _kv *B, int bi, _kv *C, int ci, int n, int len) {
 	int i = ai, j = bi, z = ci;
 	while (z < ci + len) {
 		if((i < n) && (j < n)) {
 			if(c_atoi(A[i].key) <= c_atoi(B[j].key)) {
-				//memcpy(C[z].key, A[i].key, KSIZE);
-				//memcpy(C[z].value, A[i].value, VSIZE);
 				c_memcpy(&C[z], &A[i], KSIZE + VSIZE);
 				i++;
 			}
 			else {
-				//memcpy(C[z].key, B[j].key, KSIZE);
-				//memcpy(C[z].value, B[j].value, VSIZE);
 				c_memcpy(&C[z], &B[j], KSIZE + VSIZE);
 				j++;
 			}
 		}
 		else if(i < n) {
-			//memcpy(C[z].key, A[i].key, KSIZE);
-			//memcpy(C[z].value, A[i].value, VSIZE);
 			c_memcpy(&C[z], &A[i], KSIZE + VSIZE);
 			i++;
 		}
 		else if (j < n) {
-			//memcpy(C[z].key, B[j].key, KSIZE);
-			//memcpy(C[z].value, B[j].value, VSIZE);
 			c_memcpy(&C[z], &B[j], KSIZE + VSIZE);
 			j++;
 		}
@@ -286,7 +224,7 @@ __global__ void d_pathMerge(_kv *A, _kv *B, _kv *C, int n, int parts) {
 void pathMerge(_kv *A, _kv *B, _kv *C, int n, int parts, cudaStream_t stream) {
 	dim3 block(32);
 	dim3 grid((parts + block.x - 1)/block.x);
-	//d_pathMerge<<<grid, block, 0, stream>>> (A, B, C, n, parts);
+	d_pathMerge<<<grid, block, 0, stream>>> (A, B, C, n, parts);
 }
 int check_sorted(_compdata *data) {
 	int i, j;
@@ -389,8 +327,6 @@ int main(int argc, char *argv[])
 	deviceMalloc(d_inp1, d_inp2, d_out, data.psize);
 	dim3 block(1024);
 	dim3 grid((data.psize + block.x - 1)/block.x);
-	//dim3 block(1);
-	//dim3 grid(1);
 
 	//create streams
 	for(i = 0; i < N_STREAMS; i++) {
